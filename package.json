@@ -1,0 +1,19 @@
+{
+  "name": "tree",
+  "version": "1.0.0",
+  "main": "index.js",
+  "bin": {
+    "tree": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "treeify": "^1.1.0",
+    "yargs": "^17.7.2"
+  }
+}
