@@ -6,15 +6,17 @@ This is a command-line tool to visualize the dependency tree of a Node.js projec
 
 To install the tool globally, run the following command:
 
-git clone https://github.com/GjinPrelvukaj/Tree
-cd Tree
-npm install -g .
+`git clone https://github.com/GjinPrelvukaj/Tree`
+
+`cd Tree`
+
+`npm install -g .`
 
 ## Usage
 
 After installation, you can use the tool by running the `tree` command followed by the path to your project:
 
-tree --path "path/to/your/project"
+`tree --path "path/to/your/project"`
 
 ### Options
 
@@ -22,7 +24,7 @@ tree --path "path/to/your/project"
 
 ### Example
 
-tree --path "/Users/username/projects/my-node-project"
+`tree --path "/Users/username/projects/my-node-project"`
 
 This will display a tree structure of your project's dependencies in the console.
 
