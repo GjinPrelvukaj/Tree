@@ -1,41 +1,84 @@
 #!/usr/bin/env node
-import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
+
 import fs from "fs";
 import path from "path";
 import { exec } from "child_process";
 import treeify from "treeify";
 import { createCanvas } from "canvas";
 import inquirer from "inquirer";
-import prompt from "inquirer";
+import chalk from "chalk";
+import ora from "ora";
+import { filesize } from "filesize";
+
+function intro() {
+  console.clear();
+  console.log(chalk.green`
+
+        .     .  .      +     .      .          .      
+   .       .      .     #       .           .
+      .      .         ###            .      .      .    
+    .      .   "#:. .:##"##:. .:#"  .      .
+        .      . "####"###"####"  .
+     .     "#:.    .:#"###"#:.    .:#"  .        .       .
+.             "#########"#########"        .        .      
+      .    "#:.  "####"###"####"  .:#"   .       .
+   .     .  "#######""##"##""#######"                  .
+              ."##"#####"#####"##"           .      .
+  .   "#:. ...  .:##"###"###"##:.  ... .:#"     .     .
+    .     "#######"##"#####"##"#######"      .     .     
+  .    .     "#####""#######""#####"    .      .     .  
+          .     "      000      "    .     .  .    .   
+     .         .   .   000     .        .       .      
+......................O000O.................................
+`);
+}
+
+intro();
+
+const cacheFile = path.join(process.cwd(), ".dependency-tree-cache.json");
+
+function readCache() {
+  if (fs.existsSync(cacheFile)) {
+    return JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+  }
+  return {};
+}
+
+function writeCache(cache) {
+  fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
+}
 
 async function main() {
   const answers = await inquirer.prompt([
     {
       type: "input",
       name: "path",
-      message: "Enter the path to the project:",
+      message: chalk.green("📁 Enter the path to the project:"),
       validate: (input) =>
-        fs.existsSync(input) ? true : "Project path does not exist",
+        fs.existsSync(input)
+          ? true
+          : chalk.red("❌ Project path does not exist"),
     },
     {
       type: "list",
       name: "output",
-      message: "Choose output format:",
+      message: chalk.green("🖥️ Choose output format:"),
       choices: ["tree", "json"],
       default: "tree",
     },
     {
       type: "list",
       name: "export",
-      message: "Export the tree?",
+      message: chalk.green("📤 Export the tree?"),
       choices: ["No", "image", "svg"],
       default: "No",
     },
     {
       type: "input",
       name: "filter",
-      message: "Enter packages to filter (comma-separated) or leave empty:",
+      message: chalk.green(
+        "🔍 Enter packages to filter (comma-separated) or leave empty:"
+      ),
     },
   ]);
 
@@ -44,40 +87,107 @@ async function main() {
   const packageJsonPath = path.join(projectPath, "package.json");
 
   if (!fs.existsSync(packageJsonPath)) {
-    console.error("package.json not found in the specified path");
+    console.error(chalk.red("❌ package.json not found in the specified path"));
     return;
   }
 
-  exec("npm list --json", { cwd: projectPath }, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Error: ${error.message}`);
-      return;
-    }
-    if (stderr) {
-      console.error(`Error: ${stderr}`);
-      return;
-    }
+  const cache = readCache();
+  const cacheKey = `${projectPath}-${answers.filter}`;
 
-    const dependencyTree = JSON.parse(stdout);
-    const formattedTree = formatDependencyTree(dependencyTree, answers.filter);
+  if (cache[cacheKey]) {
+    console.log(chalk.yellow("Using cached result..."));
+    displayResult(cache[cacheKey], answers);
+    return;
+  }
 
-    if (answers.output === "json") {
-      console.log(JSON.stringify(formattedTree, null, 2));
-    } else {
-      const treeString = treeify.asTree(formattedTree, true);
-      console.log(treeString);
-    }
+  const spinner = ora("Analyzing dependencies...").start();
 
-    if (answers.export !== "No") {
-      const treeString = treeify.asTree(formattedTree, true);
-      exportTree(treeString, answers.export);
-    }
+  try {
+    const packageSizes = await getPackageSizes(projectPath);
+    const dependencyTree = JSON.parse(
+      await new Promise((resolve, reject) => {
+        exec("npm ls --json --prod", { cwd: projectPath }, (error, stdout) => {
+          if (error) reject(error);
+          else resolve(stdout);
+        });
+      })
+    );
+
+    const formattedTree = formatDependencyTree(
+      dependencyTree,
+      answers.filter,
+      packageSizes
+    );
+
+    spinner.succeed("Analysis complete!");
+
+    cache[cacheKey] = formattedTree;
+    writeCache(cache);
+
+    displayResult(formattedTree, answers);
+  } catch (error) {
+    spinner.fail("Analysis failed");
+    console.error(chalk.red(`❌ ${error}`));
+  }
+}
+
+function displayResult(formattedTree, answers) {
+  if (answers.output === "json") {
+    console.log(chalk.cyan(JSON.stringify(formattedTree, null, 2)));
+  } else {
+    const treeString = treeify.asTree(formattedTree, true);
+    console.log(chalk.green(treeString));
+  }
+
+  if (answers.export !== "No") {
+    const treeString = treeify.asTree(formattedTree, true);
+    exportTree(treeString, answers.export);
+  }
+}
+
+main().catch((error) => console.error(chalk.red(`❌ ${error}`)));
+
+async function getPackageSizes(projectPath) {
+  return new Promise((resolve, reject) => {
+    exec("npm ls --json --prod", { cwd: projectPath }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      const dependencies = JSON.parse(stdout).dependencies;
+      const sizes = {};
+
+      Object.keys(dependencies).forEach((dep) => {
+        const packagePath = path.join(projectPath, "node_modules", dep);
+        const size = getFolderSize(packagePath);
+        sizes[dep] = size;
+      });
+
+      resolve(sizes);
+    });
   });
 }
 
-main().catch(console.error);
+function getFolderSize(folderPath) {
+  let totalSize = 0;
+  const files = fs.readdirSync(folderPath);
 
-function formatDependencyTree(node, filter) {
+  files.forEach((file) => {
+    const filePath = path.join(folderPath, file);
+    const stats = fs.statSync(filePath);
+
+    if (stats.isFile()) {
+      totalSize += stats.size;
+    } else if (stats.isDirectory()) {
+      totalSize += getFolderSize(filePath);
+    }
+  });
+
+  return totalSize;
+}
+
+function formatDependencyTree(node, filter, packageSizes) {
   const result = {};
   if (node.dependencies) {
     const filterPackages = filter
@@ -85,8 +195,15 @@ function formatDependencyTree(node, filter) {
       : null;
     Object.keys(node.dependencies).forEach((dep) => {
       if (!filterPackages || filterPackages.includes(dep)) {
-        result[`${dep}@${node.dependencies[dep].version}`] =
-          formatDependencyTree(node.dependencies[dep], filter);
+        const size = packageSizes[dep] || 0;
+        let depString = `${dep}@${node.dependencies[dep].version} (${filesize(
+          size
+        )})`;
+        result[depString] = formatDependencyTree(
+          node.dependencies[dep],
+          filter,
+          packageSizes
+        );
       }
     });
   }
@@ -115,7 +232,7 @@ function exportTree(treeString, format) {
     const stream = canvas.createPNGStream();
     stream.pipe(out);
     out.on("finish", () =>
-      console.log(`The PNG file was created: ${outputPath}`)
+      console.log(chalk.green(`✅ The PNG file was created: ${outputPath}`))
     );
   } else if (format === "svg") {
     const svgString = `
@@ -136,6 +253,6 @@ function exportTree(treeString, format) {
       </svg>
     `;
     fs.writeFileSync(outputPath, svgString);
-    console.log(`The SVG file was created: ${outputPath}`);
+    console.log(chalk.green(`✅ The SVG file was created: ${outputPath}`));
   }
 }
