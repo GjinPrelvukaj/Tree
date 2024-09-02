@@ -37,7 +37,7 @@ async function main() {
         type: "confirm",
         name: "useCache",
         message: chalk.yellow("Cached result found. Do you want to use it?"),
-        default: true,
+        default: false,
       },
     ]);
 
@@ -71,5 +71,4 @@ async function main() {
     console.error(chalk.red(`❌ ${error}`));
   }
 }
-
 main().catch((error) => console.error(chalk.red(`❌ ${error}`)));
