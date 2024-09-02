@@ -2,6 +2,7 @@
   "name": "tree",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "bin": {
     "tree": "./index.js"
   },
@@ -13,6 +14,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "canvas": "^2.11.2",
+    "inquirer": "^10.1.8",
     "treeify": "^1.1.0",
     "yargs": "^17.7.2"
   }
